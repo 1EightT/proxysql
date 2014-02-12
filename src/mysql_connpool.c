@@ -44,15 +44,6 @@ gboolean reconnect_server_on_shut_fd(mysql_session_t *sess) {
 					sess->server_mycpe->conn->net.vio=0;
 				}
 				mysql_close(sess->server_mycpe->conn);  // drop the connection
-/* obsoleted by hostgroup : BEGIN 
-				if (sess->send_to_slave==FALSE) {
-					free(sess->master_mycpe);
-					sess->master_mycpe=NULL;
-				} else {
-					free(sess->slave_mycpe);
-					sess->slave_mycpe=NULL;
-				}
-obsoleted by hostgroup : END */
 				sess->server_mycpe=NULL;
 			}
 			mycpe=mysql_connpool_get_connection(&gloconnpool, sess->server_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->server_ptr->port);   // re-establish a new connection	
@@ -85,25 +76,6 @@ obsoleted by hostgroup : END */
 			write_one_pkt_to_net(sess->client_myds,hs);
 			return FALSE;
 		} else {
-/* obsoleted by hostgroup : BEGIN
-			if (sess->send_to_slave==FALSE) {
-				if (sess->master_myds) {
-					sess->master_fd=mycpe->conn->net.fd;
-					sess->master_myds->fd=sess->master_fd;
-					sess->master_mycpe=mycpe;
-					sess->server_fd=sess->master_fd;
-					sess->server_myds=sess->master_myds;
-					sess->server_mycpe=sess->master_mycpe;
-				}
-			} else {
-				sess->slave_fd=mycpe->conn->net.fd;
-				sess->slave_myds->fd=sess->slave_fd;
-				sess->slave_mycpe=mycpe;
-				sess->server_fd=sess->slave_fd;
-				sess->server_myds=sess->slave_myds;
-				sess->server_mycpe=sess->slave_mycpe;
-			}
-obsoleted by hostgroup : END */
 			sess->fds[1].fd=sess->server_myds->fd;
 			sess->server_myds->active=TRUE;
 		}
@@ -112,17 +84,6 @@ obsoleted by hostgroup : END */
 }
 
 
-/*
-myConnPools *mysql_connpool_init() {
-	myConnPools *cp;
-	if ((cp=malloc(sizeof(myConnPools)))==NULL) { exit(EXIT_FAILURE); }
-	pthread_mutex_init(&cp->mutex, NULL);
-	cp->connpools=g_ptr_array_new();
-	cp->enabled=TRUE;	// enabled by default
-	proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Main connection pool struct created\n");
-	return cp;
-}
-*/
 void mysql_connpool_init(global_variable_entry_t *gve) {
 	pthread_mutex_init(&gloconnpool.mutex, NULL);
 	gloconnpool.connpools=g_ptr_array_new();
@@ -231,13 +192,7 @@ mysql_cp_entry_t *mysql_connpool_get_connection(myConnPools *cp, const char *hos
 */
 			int tcp_keepalive_time=600;
 			setsockopt(mysql_con->net.fd, SOL_TCP,  TCP_KEEPIDLE, (char *)&tcp_keepalive_time, sizeof(tcp_keepalive_time));
-//			int arg_on=1;
-//			ioctl(mysql_con->net.fd, FIONBIO, (char *)&arg_on);
 			ioctl_FIONBIO(mysql_con->net.fd, 1);
-//			pthread_mutex_lock(&cp->mutex);	// acquire the lock only to add the new created connection
-//			mcp=mysql_cp_entry_tpool_find(cp, hostname, username, password, db, port);
-//			g_ptr_array_add(mcp->used_conns,mycpe);
-//			pthread_mutex_unlock(&cp->mutex);
 		}
 	}
 	return mycpe;

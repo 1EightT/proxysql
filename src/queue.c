@@ -2,15 +2,9 @@
 
 
 void queue_init(queue_t * q) {
-	struct timeval  tv;
-	gettimeofday(&tv, NULL);
-	unsigned long long l=(tv.tv_sec) * 1000000 + (tv.tv_usec);
 //	All the functions in queues must be lock free.
 //	If a lock is needed, should be executed by the calling function : mysql_data_stream_init
 	q->buffer=find_free_mem_block(&conn_queue_pool);
-	gettimeofday(&tv, NULL);
-	l=(tv.tv_sec) * 1000000 + (tv.tv_usec) - l;
-	__sync_fetch_and_add(&glotimers[TIMER_find_queue],l);	
 	q->size=conn_queue_pool.size;
 	q->head=0;
 	q->tail=0;

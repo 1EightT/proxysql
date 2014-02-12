@@ -18,20 +18,6 @@ typedef struct __fdb_system_var_t {
 EXTERN fdb_system_var_t fdb_system_var;
 EXTERN fdb_hash_t **fdb_hashes;
 
-enum enum_timer { 
-	TIMER_array2buffer,
-	TIMER_buffer2array,
-	TIMER_read_from_net,
-	TIMER_write_to_net,
-	TIMER_processdata,
-	TIMER_find_queue,
-	TIMER_poll
-};
-
-
-typedef struct _timer {
-	unsigned long long total, begin;
-} timer;
 
 
 enum enum_resultset_progress {
@@ -217,8 +203,6 @@ struct _mysql_session_t {
 	int admin;
 	int client_fd;
 	int server_fd;
-	int master_fd;
-	int slave_fd;
 	int status;
 	int force_close_backends;
 	int ret;	// generic return status
@@ -257,7 +241,6 @@ obsoleted by hostgroup : END */
 	char *mysql_schema_cur;
 	char *mysql_schema_new;	
 	char scramble_buf[21];
-	timer *timers;
 	gboolean mysql_query_cache_hit; // must go into query_info
 	gboolean mysql_server_reconnect;
 	gboolean send_to_slave; // must go into query_info
@@ -307,8 +290,6 @@ typedef struct _global_variables {
 	int verbose;
 	int print_statistics_interval;
 	
-	gboolean enable_timers;
-
 	int mysql_poll_timeout;
 	int mysql_poll_timeout_maintenance;
 

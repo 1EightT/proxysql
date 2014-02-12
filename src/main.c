@@ -3,7 +3,6 @@
 
 
 
-static gint timers = 0;
 static gint proxy_admin_port = 0;
 static gint proxy_mysql_port = 0;
 static gchar *config_file="proxysql.cnf";
@@ -305,8 +304,6 @@ int main(int argc, char **argv) {
 		//fprintf(stderr, "verbose level: %d, print_statistics_interval: %d\n", glovars.verbose, glovars.print_statistics_interval);
 	}
 
-	// FIXME : this needs to moved elsewhere
-	for (i=0;i<TOTAL_TIMERS;i++) { glotimers[i]=0; }
 
 
 	listen_tcp_fd=listen_on_port((uint16_t)glovars.proxy_mysql_port);
@@ -326,7 +323,6 @@ int main(int argc, char **argv) {
 
 //	start background threads:
 //	- mysql QC purger ( purgeHash_thread )
-//	- timer dumper ( dump_timers )
 //	- mysql connection pool purger ( mysql_connpool_purge_thread )
 	start_background_threads(&attr);
 
@@ -351,7 +347,6 @@ int main(int argc, char **argv) {
 	}
 	g_free(glo_mysql_thrarr);
 	g_free(args);
-	pthread_join(thread_dt, NULL);
 	pthread_join(thread_cppt, NULL);
 	pthread_join(thread_qct, NULL);
 	return 0;
