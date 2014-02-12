@@ -257,15 +257,6 @@ int init_global_variables(GKeyFile *gkf) {
 		}
 	}
 
-	// set enable_timers
-	glovars.enable_timers=0;
-	if (g_key_file_has_key(gkf, "global", "enable_timers", NULL)) {
-		gint r=g_key_file_get_integer(gkf, "global", "enable_timers", &error);
-		if (r >= 0 ) {
-			glovars.enable_timers=TRUE;
-		}
-	}
-
 	// set print_statistics_interval
 	glovars.print_statistics_interval=10;
 	if (g_key_file_has_key(gkf, "global", "print_statistics_interval", NULL)) {

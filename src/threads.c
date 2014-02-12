@@ -12,9 +12,6 @@ void start_background_threads(pthread_attr_t *attr) {
 //		pthread_t qct;
 		pthread_create(&thread_qct, NULL, purgeHash_thread, &QC);
 	}
-//	pthread_t dt;
-	r=pthread_create(&thread_dt, attr, dump_timers , NULL);
-	assert(r==0);
 //	pthread_t cppt;
 	r=pthread_create(&thread_cppt, attr, mysql_connpool_purge_thread , NULL);
 	assert(r==0);

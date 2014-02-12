@@ -1,5 +1,18 @@
 #include "proxysql.h"
 
+static void queue_back_client_pkt(mysql_session_t *sess, pkt *p) {
+	GPtrArray *new_input_pkts=g_ptr_array_sized_new(sess->client_myds->input.pkts->len);
+	g_ptr_array_add(new_input_pkts,p);
+	while(sess->client_myds->input.pkts->len) {
+		pkt *pn=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
+		g_ptr_array_add(new_input_pkts,pn);
+	}
+	while(new_input_pkts->len) {
+		pkt *pn=g_ptr_array_remove_index(new_input_pkts, 0);
+		g_ptr_array_add(sess->client_myds->input.pkts,pn);
+	}
+	g_ptr_array_free(new_input_pkts,TRUE);
+}
 
 
 static void sync_server_bytes_at_cmd(mysql_session_t *sess) {
@@ -144,20 +157,8 @@ static inline void server_COM_QUERY(mysql_session_t *sess, pkt *p, enum MySQL_re
 						sync_server_bytes_at_cmd(sess);
 
 
-						// return control to master if we were using a slave
-						proxy_debug(PROXY_DEBUG_MYSQL_RW_SPLIT, 5, "Returning control to master. FDs: current: %d master: %d slave: %d\n", sess->server_fd , sess->master_fd , sess->slave_fd);
 						if (sess->send_to_slave==TRUE) {
 							sess->send_to_slave=FALSE;
-/* obsoleted by hostgroup : BEGIN
-							if (sess->master_myds) {
-								sess->server_myds=sess->master_myds;
-								sess->server_fd=sess->master_fd;
-								sess->server_mycpe=sess->master_mycpe;
-								sess->server_ptr=sess->master_ptr;
-								sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
-								sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
-							}
-obsoleted by hostgroup : END */
 						}
 
 //						conn->status &= ~CONNECTION_READING_SERVER;
@@ -424,34 +425,6 @@ if the query is not cached, mark it as to be cached and modify the code on resul
 			} else {
 				proxy_debug(PROXY_DEBUG_QUERY_CACHE, 4, "Not found QC entry for checksum %s after query prepocessing\n", g_checksum_get_string(sess->query_info.query_checksum));
 
-/*
-				sess->send_to_slave=TRUE;
-				if (sess->slave_ptr==NULL) {
-					// no slave assigned yet, find one!
-					//sess->slave_ptr=new_server_slave();
-					sess->slave_ptr=mysql_server_random_entry_from_hostgroup__lock(1);
-					if (sess->slave_ptr==NULL) {
-						// handle error!!
-						sess->healthy=0;
-						return ;
-					}
-					sess->slave_mycpe=mysql_connpool_get_connection(&gloconnpool, sess->slave_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->slave_ptr->port);
-					if (sess->slave_mycpe==NULL) {
-						// handle error!!
-						sess->healthy=0;
-						return ;
-					}
-					sess->slave_fd=sess->slave_mycpe->conn->net.fd;
-					sess->slave_myds=mysql_data_stream_init(sess->slave_fd , sess);
-					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new slave_connection fd: %d\n", sess->slave_fd);
-				} 
-				sess->server_myds=sess->slave_myds;
-				sess->server_fd=sess->slave_fd;
-				sess->server_mycpe=sess->slave_mycpe;
-				sess->server_ptr=sess->slave_ptr;
-				sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
-				sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
-*/
 			}
 		}
 //					conn->status &= ~CONNECTION_READING_CLIENT; // NOTE: this is not true for packets >= 16MB , be careful
@@ -541,23 +514,8 @@ static int process_client_pkts(mysql_session_t *sess) {
 			}
 			mysql_backend_t *mybe=g_ptr_array_index(sess->mybes, sess->query_info.destination_hostgroup);
 			if (mybe->server_ptr==NULL) {
-				// we don't have a backend , probably because there is no host associated with the hostgroup, or because we have an error
-				// park the packet ?
-				// create a DataStream without FD ?
-				// push the packet back to client_myds ?
-				// FIXME
-				// trying "put it back"
-				GPtrArray *new_input_pkts=g_ptr_array_sized_new(sess->client_myds->input.pkts->len);
-				g_ptr_array_add(new_input_pkts,p);
-				while(sess->client_myds->input.pkts->len) {
-					pkt *pn=g_ptr_array_remove_index(sess->client_myds->input.pkts, 0);
-					g_ptr_array_add(new_input_pkts,pn);
-				}
-				while(new_input_pkts->len) {
-					pkt *pn=g_ptr_array_remove_index(new_input_pkts, 0);
-					g_ptr_array_add(sess->client_myds->input.pkts,pn);
-				}
-				g_ptr_array_free(new_input_pkts,TRUE);
+				// push the packet back to client queue
+				queue_back_client_pkt(sess, p);
 				return 0;
 			}
 
@@ -603,46 +561,6 @@ static int process_client_pkts(mysql_session_t *sess) {
 				// we should never reach here, sanity check
 				assert(0);
 			}
-/*
-			if (
-				(sess->send_to_slave==FALSE) && 
-				(sess->master_ptr==NULL) ) { // we don't have a connection to a master
-
-					// no master assigned yet, find one!
-					//sess->master_ptr=new_server_master();
-					sess->master_ptr=mysql_server_random_entry_from_hostgroup__lock(0);
-					if (sess->master_ptr==NULL) {
-						// handle error!!
-						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
-						return -1;
-					}
-					sess->master_mycpe=mysql_connpool_get_connection(&gloconnpool, sess->master_ptr->address, sess->mysql_username, sess->mysql_password, sess->mysql_schema_cur, sess->master_ptr->port);
-					if (sess->master_mycpe==NULL) {
-						// handle error!!
-						authenticate_mysql_client_send_ERR(sess, 1045, "#28000Access denied for user");
-						return -1;
-					}
-					sess->master_fd=sess->master_mycpe->conn->net.fd;
-					sess->master_myds=mysql_data_stream_init(sess->master_fd, sess);
-					proxy_debug(PROXY_DEBUG_MYSQL_CONNECTION, 4, "Created new master_connection fd: %d\n", sess->master_fd);
-					sess->server_myds=sess->master_myds;
-					sess->server_fd=sess->master_fd;
-					sess->server_mycpe=sess->master_mycpe;
-					sess->server_ptr=sess->master_ptr;
-				} 
-				//sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
-				//sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
-			g_ptr_array_add(sess->server_myds->output.pkts, p);
-			if (
-				(sess->mysql_server_reconnect==TRUE)
-				&& (queue_data(&sess->server_myds->input.queue)==0)
-				&& (queue_data(&sess->server_myds->output.queue)==0)
-			) {
-				sess->server_bytes_at_cmd.bytes_sent=sess->server_myds->bytes_info.bytes_sent;
-				sess->server_bytes_at_cmd.bytes_recv=sess->server_myds->bytes_info.bytes_recv;
-			}
-		//debug_print("Moving pkts from %s to %s\n", "client", "server");
-*/
 		}
 	}
 	return 0;
@@ -698,7 +616,6 @@ static void sess_close(mysql_session_t *sess) {
 		mypkt_free(p,sess,1);
 	}
 	g_ptr_array_free(sess->resultset,TRUE);
-	free(sess->timers);
 
 	if (sess->mysql_username) { free(sess->mysql_username); sess->mysql_username=NULL; }
 	if (sess->mysql_password) { free(sess->mysql_password); sess->mysql_password=NULL; }
@@ -722,12 +639,6 @@ static void sess_close(mysql_session_t *sess) {
 
 	sess->healthy=0;
 	init_query_metadata(sess, NULL);
-	//free(sess);
-	//mysql_con->net.fd=mysql_fd;
-	//if (mysql_con) { mysql_close(mysql_con); }
-//	mysql_close(mysql_con); <== don't call mysql_close, as the connection is already closed by the connector logic
-	// this needs to be fixed. Connectors shouldn't close a server connection . Shutdown should be moved here
-//	mysql_thread_end();
 
 	// unregister the connection
 	pthread_rwlock_wrlock(&glomysrvs.rwlock);
@@ -834,7 +745,6 @@ mysql_session_t * mysql_session_new(proxy_mysql_thread_t *handler_thread, int cl
 	sess->force_close_backends=0;
 	sess->admin=0;
 	sess->resultset=g_ptr_array_new();
-	sess->timers=calloc(sizeof(timer),TOTAL_TIMERS);
 	sess->handler_thread=handler_thread;
 	//sess->client_myds=mysql_data_stream_init(sess->client_fd, sess);
 	sess->client_myds=mysql_data_stream_new(sess->client_fd, sess);	
