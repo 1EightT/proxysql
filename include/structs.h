@@ -120,6 +120,17 @@ struct _mysql_data_stream_t {
 };
 
 
+
+typedef struct _mysql_server_hostgroup_entry_t MSHGE;
+  struct _mysql_server_hostgroup_entry_t {
+  mysql_server *server_ptr;
+  unsigned long weight;
+  long long connections_created; 
+  long long connections_active;
+  bytes_stats server_bytes;
+};
+
+
 struct _free_pkts_t {
 	GTrashStack *stack;
 	GPtrArray *blocks;	
